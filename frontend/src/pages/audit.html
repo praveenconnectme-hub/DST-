@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Audit Log — Demand Sensing Control Tower</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<nav class="sidebar">
+  <div class="sidebar-logo">Demand Sensing<br>Control Tower<span>Samsung India · TV Division</span></div>
+  <div class="nav-section">
+    <div class="nav-section-label">Pipeline</div>
+    <a class="nav-item" href="/index.html"><span class="icon">&#9711;</span> Dashboard</a>
+    <a class="nav-item" href="/pages/forecast.html"><span class="icon">&#9650;</span> Forecast</a>
+    <a class="nav-item" href="/pages/ingestion.html"><span class="icon">&#8659;</span> Ingestion</a>
+  </div>
+  <div class="nav-section">
+    <div class="nav-section-label">Gates</div>
+    <a class="nav-item" href="/pages/promotions.html"><span class="icon">&#9989;</span> Promotions (G1)</a>
+    <a class="nav-item text-muted" href="#"><span class="icon">&#128274;</span> S&OP Consensus (G2)</a>
+    <a class="nav-item text-muted" href="#"><span class="icon">&#128274;</span> Retraining (G3)</a>
+  </div>
+  <div class="nav-section">
+    <div class="nav-section-label">System</div>
+    <a class="nav-item active" href="/pages/audit.html"><span class="icon">&#128196;</span> Audit Log</a>
+  </div>
+  <div class="sidebar-user">
+    <div>
+      <div class="sidebar-user-name" id="sidebar-username">—</div>
+      <div class="sidebar-user-role" id="sidebar-role">—</div>
+    </div>
+    <button class="btn-logout" id="btn-logout">Sign out</button>
+  </div>
+</nav>
+
+<div class="main-wrap">
+  <header class="header">
+    <div class="header-title">Audit Log</div>
+    <div class="header-meta">
+      <button id="btn-refresh" class="btn btn-secondary">&#8635; Refresh</button>
+    </div>
+  </header>
+  <main class="content">
+    <div class="card">
+      <div class="card-title">All Audit Events</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Timestamp</th>
+              <th>Actor</th>
+              <th>Action</th>
+              <th>Entity</th>
+              <th>Detail</th>
+            </tr>
+          </thead>
+          <tbody id="audit-tbody">
+            <tr><td colspan="6" class="text-center text-muted">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+  (async () => {
+    try {
+      const u = await API.me();
+      if (u) {
+        document.getElementById("sidebar-username").textContent = u.user_id;
+        document.getElementById("sidebar-role").textContent     = u.role;
+      }
+    } catch (_) {}
+    document.getElementById("btn-logout").addEventListener("click", async () => {
+      try { await API.logout(); } catch (_) {}
+      window.location.href = "/pages/login.html";
+    });
+  })();
+</script>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  async function loadAudit() {
+    const tbody = document.getElementById("audit-tbody");
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center"><div class="spinner" style="margin:auto"></div></td></tr>';
+    try {
+      const rows = await API.getAuditLog();
+      if (!rows || rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No audit records yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = "";
+      rows.slice().reverse().forEach(row => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${row.audit_id}</td>
+          <td class="text-sm">${row.timestamp || "—"}</td>
+          <td><span class="badge badge-blue">${row.actor || "system"}</span></td>
+          <td>${row.action || "—"}</td>
+          <td class="text-muted">${row.entity || "—"}</td>
+          <td class="text-sm text-muted" style="max-width:300px;overflow:hidden;text-overflow:ellipsis;">${row.detail_json || ""}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    } catch(e) {
+      tbody.innerHTML = `<tr><td colspan="6" class="alert alert-error">${e.message}</td></tr>`;
+    }
+  }
+
+  document.getElementById("btn-refresh").addEventListener("click", loadAudit);
+  loadAudit();
+});
+</script>
+</body>
+</html>

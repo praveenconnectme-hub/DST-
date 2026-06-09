@@ -1,0 +1,59 @@
+version: "3.9"
+name: demandsensingtower   # pin project name — avoids normalisation drift across Compose versions
+
+services:
+  gateway:
+    build:
+      context: ./gateway
+    ports:
+      - "8080:80"
+    depends_on:
+      - frontend
+      - api
+    networks:
+      - dst_net
+
+  frontend:
+    build:
+      context: ./frontend
+    networks:
+      - dst_net
+
+  api:
+    build:
+      context: ./api
+    environment:
+      - DB_PATH=/data/dst.db
+      - DATA_DIR=/data
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - dst_data:/data
+    networks:
+      - dst_net
+
+  worker:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    environment:
+      - DB_PATH=/data/dst.db
+      - DATA_DIR=/data
+      - POLL_INTERVAL=5
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - dst_data:/data
+    networks:
+      - dst_net
+
+volumes:
+  dst_data:
+    # Pure Docker named volume (D-023): stored inside Docker Desktop's Linux VM,
+    # NOT on the macOS host filesystem.  macOS bind-mounts use osxfs/VirtioFS
+    # which does not implement POSIX advisory file locks reliably — SQLite WAL
+    # mode hits ERRNO 35 (deadlock) and disk I/O errors under concurrent access.
+    # Named volumes use the Linux VM's ext4 filesystem where flock() works
+    # correctly.  To reset the DB: docker compose down -v && docker compose up.
+
+networks:
+  dst_net:
+    driver: bridge

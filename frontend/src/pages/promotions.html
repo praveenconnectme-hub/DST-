@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Promotions (G1) — Demand Sensing Control Tower</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+<!-- Sidebar -->
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    Demand Sensing<br>Control Tower
+    <span>Samsung India · TV Division</span>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-label">Pipeline</div>
+    <a class="nav-item" href="/index.html"><span class="icon">&#9711;</span> Dashboard</a>
+    <a class="nav-item" href="/pages/forecast.html"><span class="icon">&#9650;</span> Forecast</a>
+    <a class="nav-item" href="/pages/ingestion.html"><span class="icon">&#8659;</span> Ingestion</a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-label">Gates</div>
+    <a class="nav-item active" href="/pages/promotions.html"><span class="icon">&#9989;</span> Promotions (G1)</a>
+    <a class="nav-item text-muted" href="#"><span class="icon">&#128274;</span> S&OP Consensus (G2)</a>
+    <a class="nav-item text-muted" href="#"><span class="icon">&#128274;</span> Retraining (G3)</a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-label">System</div>
+    <a class="nav-item" href="/pages/audit.html"><span class="icon">&#128196;</span> Audit Log</a>
+  </div>
+
+  <div class="sidebar-user">
+    <div>
+      <div class="sidebar-user-name" id="sidebar-username">—</div>
+      <div class="sidebar-user-role" id="sidebar-role">—</div>
+    </div>
+    <button class="btn-logout" id="btn-logout">Sign out</button>
+  </div>
+</nav>
+
+<!-- Main -->
+<div class="main-wrap">
+  <header class="header">
+    <div class="header-title">Promotions Calendar &amp; G1 Gate</div>
+    <div class="header-meta">
+      <span id="cycle-badge" class="badge badge-blue">Cycle —</span>
+      <span id="header-user" class="text-muted text-sm">—</span>
+    </div>
+  </header>
+
+  <main class="content">
+    <div id="page-error" class="alert alert-error hidden"></div>
+
+    <!-- ── Four live KPI indicators (BRD G1 DoD) ── -->
+    <div class="kpi-strip">
+      <div class="kpi-card">
+        <div class="kpi-label">Pipeline State</div>
+        <div class="kpi-value" id="kpi-pipeline" style="font-size:16px;">—</div>
+        <div class="kpi-sub" id="kpi-pipeline-cycle">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">G1 Status</div>
+        <div class="kpi-value" id="kpi-g1" style="font-size:16px;">—</div>
+        <div class="kpi-sub" id="kpi-g1-by">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Promotions</div>
+        <div class="kpi-value" id="kpi-promo-count">—</div>
+        <div class="kpi-sub" id="kpi-promo-cycle">this cycle</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Sensing MAPE</div>
+        <div class="kpi-value" id="kpi-mape" style="font-size:16px;">—</div>
+        <div class="kpi-sub" id="kpi-mape-sub">XGBoost holdout</div>
+      </div>
+    </div>
+
+    <!-- ── G1 Gate approval card ── -->
+    <div id="gate-card" class="gate-card gate-pending">
+      <div class="gate-card-info">
+        <div class="gate-card-title">G1 — Promotions Calendar Gate</div>
+        <div class="gate-card-sub" id="gate-card-sub">
+          Review promotions below, then approve to unblock the sensing pipeline.
+        </div>
+        <div class="text-sm text-muted mt-8" id="gate-approved-by" style="display:none;"></div>
+      </div>
+      <div>
+        <!-- Visible to all; enabled only for commercial_head (checked server-side — 403 for others) -->
+        <button id="btn-approve" class="btn btn-success" disabled
+                title="Only commercial_head may approve">
+          &#10003; Approve G1
+        </button>
+        <div id="approve-role-hint" class="text-sm text-muted mt-8" style="text-align:right;"></div>
+      </div>
+    </div>
+
+    <!-- ── Cycle selector + action buttons ── -->
+    <div class="flex-between" style="margin-bottom:16px;">
+      <div class="flex gap-8" style="align-items:center;">
+        <label class="form-label" style="margin:0;" for="cycle-input">Cycle:</label>
+        <input class="form-input" id="cycle-input" type="text"
+               placeholder="e.g. 2024-W43" style="width:140px;" />
+        <button class="btn btn-secondary" id="btn-load-cycle">Load</button>
+      </div>
+      <div class="flex gap-8">
+        <button class="btn btn-secondary" id="btn-ai-draft">&#10024; System-suggested</button>
+        <button class="btn btn-primary"   id="btn-add-promo">+ Add Promotion</button>
+      </div>
+    </div>
+
+    <!-- ── Add / Edit panel (hidden by default) ── -->
+    <div class="panel hidden" id="promo-panel">
+      <div class="panel-title" id="panel-title">Add Promotion</div>
+      <form id="promo-form">
+        <input type="hidden" id="edit-promo-id" value="" />
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="f-event-name">Promotion Name</label>
+            <input class="form-input" type="text" id="f-event-name"
+                   placeholder="e.g. Diwali TV Sale" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="f-offer-type">Offer Type</label>
+            <select class="form-select" id="f-offer-type">
+              <option value="price_discount">Price Discount</option>
+              <option value="bundle_offer">Bundle Offer</option>
+              <option value="cashback">Cashback</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="f-start-week">Start Week</label>
+            <input class="form-input" type="text" id="f-start-week"
+                   placeholder="2024-W43" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="f-end-week">End Week</label>
+            <input class="form-input" type="text" id="f-end-week"
+                   placeholder="2024-W44" required />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="f-uplift">Expected Uplift %</label>
+            <input class="form-input" type="number" id="f-uplift"
+                   min="0" max="200" step="0.1" placeholder="25" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="f-sku-id">SKU (optional)</label>
+            <input class="form-input" type="text" id="f-sku-id"
+                   placeholder="Leave blank for all SKUs" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-financial-value">Financial Value (INR, optional)</label>
+          <input class="form-input" type="number" id="f-financial-value"
+                 min="0" step="1000" placeholder="Optional spend/commitment value" />
+        </div>
+        <div class="flex gap-8">
+          <button type="submit" class="btn btn-primary" id="btn-panel-save">Save</button>
+          <button type="button" class="btn btn-secondary" id="btn-panel-cancel">Cancel</button>
+        </div>
+        <div id="panel-error" class="alert alert-error hidden" style="margin-top:10px;"></div>
+      </form>
+    </div>
+
+    <!-- ── System-suggested drafts panel ── -->
+    <div class="panel hidden" id="draft-panel">
+      <div class="flex-between">
+        <div class="panel-title" style="margin-bottom:0;">System-suggested Promotions</div>
+        <button class="btn btn-secondary" id="btn-draft-close"
+                style="padding:4px 10px;font-size:12px;">&#10005; Close</button>
+      </div>
+      <p class="text-sm text-muted mt-8">
+        These suggestions are generated from the Indian TV market event calendar.
+        Click "Add to ledger" to include one in this cycle's promotion plan.
+      </p>
+      <div class="draft-grid" id="draft-grid">
+        <div class="text-muted text-sm">Loading suggestions…</div>
+      </div>
+    </div>
+
+    <!-- ── Promotions table ── -->
+    <div class="card">
+      <div class="flex-between" style="margin-bottom:16px;">
+        <span class="card-title" style="margin-bottom:0;border-bottom:none;">
+          Promotions Ledger
+        </span>
+        <span id="promo-count-badge" class="badge badge-blue">0 entries</span>
+      </div>
+      <div id="promo-empty" class="alert alert-info hidden">
+        No promotions found for this cycle. Use "Add Promotion" or "System-suggested" to get started.
+      </div>
+      <div class="table-wrap">
+        <table id="promo-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Offer Type</th>
+              <th>Start Week</th>
+              <th>End Week</th>
+              <th class="text-right">Uplift %</th>
+              <th>SKU</th>
+              <th>Source</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="promo-tbody">
+            <tr><td colspan="8" class="text-center text-muted">
+              Select a cycle and click Load.
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+  // ── State ──────────────────────────────────────────────────────────────────
+  let currentUser   = null;
+  let currentCycle  = null;
+  let currentPromos = [];
+
+  // ── Boot ──────────────────────────────────────────────────────────────────
+  document.addEventListener("DOMContentLoaded", async () => {
+    // Identify current user (apiFetch redirects to login on 401)
+    try {
+      currentUser = await API.me();
+    } catch (_) { return; }
+    updateUserUI();
+
+    // Load pipeline state + current cycle from health
+    try {
+      const h = await API.health();
+      currentCycle = h.current_cycle || null;
+      document.getElementById("cycle-badge").textContent = `Cycle ${currentCycle || "—"}`;
+      document.getElementById("kpi-pipeline").textContent = h.pipeline_state || "IDLE";
+      document.getElementById("kpi-pipeline-cycle").textContent = h.current_cycle || "—";
+    } catch (_) {}
+
+    // Sensing MAPE (fourth live indicator)
+    try {
+      const s = await API.getSensingSummary();
+      const kpiMape    = document.getElementById("kpi-mape");
+      const kpiMapeSub = document.getElementById("kpi-mape-sub");
+      if (s.overall_sensing_mape_pct !== null) {
+        kpiMape.textContent    = s.overall_sensing_mape_pct.toFixed(1) + "%";
+        kpiMape.style.color    = "var(--kpmg-teal)";
+        kpiMapeSub.textContent = `${s.series_count} XGBoost series`;
+      } else {
+        kpiMape.textContent    = "—";
+        kpiMapeSub.textContent = "run pipeline first";
+      }
+    } catch (_) {}
+
+    // Pre-fill cycle and load data
+    if (currentCycle) {
+      document.getElementById("cycle-input").value = currentCycle;
+      await loadCycle(currentCycle);
+    }
+  });
+
+  // ── User UI ───────────────────────────────────────────────────────────────
+  function updateUserUI() {
+    if (!currentUser) return;
+    document.getElementById("sidebar-username").textContent = currentUser.user_id;
+    document.getElementById("sidebar-role").textContent     = currentUser.role;
+    document.getElementById("header-user").textContent =
+      `${currentUser.user_id} (${currentUser.role})`;
+
+    const isCH = currentUser.role === "commercial_head";
+    const btn  = document.getElementById("btn-approve");
+    const hint = document.getElementById("approve-role-hint");
+    if (isCH) {
+      btn.removeAttribute("disabled");
+      btn.title    = "Approve G1 gate for this cycle";
+      hint.textContent = "";
+    } else {
+      btn.setAttribute("disabled", "disabled");
+      btn.title    = "Only commercial_head may approve G1";
+      hint.textContent = "Restricted to commercial_head";
+    }
+  }
+
+  // ── Logout ────────────────────────────────────────────────────────────────
+  document.getElementById("btn-logout").addEventListener("click", async () => {
+    try { await API.logout(); } catch (_) {}
+    window.location.href = "/pages/login.html";
+  });
+
+  // ── Load cycle ────────────────────────────────────────────────────────────
+  document.getElementById("btn-load-cycle").addEventListener("click", async () => {
+    const cycle = document.getElementById("cycle-input").value.trim();
+    if (!cycle) return;
+    currentCycle = cycle;
+    document.getElementById("cycle-badge").textContent = `Cycle ${cycle}`;
+    await loadCycle(cycle);
+  });
+
+  async function loadCycle(cycle) {
+    await Promise.all([loadG1Status(cycle), loadPromos(cycle)]);
+  }
+
+  // ── G1 Gate status ────────────────────────────────────────────────────────
+  async function loadG1Status(cycle) {
+    try {
+      const g = await API.getGateStatus("G1", cycle);
+      renderGateCard(g);
+    } catch (_) {
+      document.getElementById("kpi-g1").textContent = "—";
+    }
+  }
+
+  function renderGateCard(g) {
+    const kpiEl      = document.getElementById("kpi-g1");
+    const kpiByEl    = document.getElementById("kpi-g1-by");
+    const cardEl     = document.getElementById("gate-card");
+    const subEl      = document.getElementById("gate-card-sub");
+    const byEl       = document.getElementById("gate-approved-by");
+    const btnApprove = document.getElementById("btn-approve");
+
+    if (g.status === "approved") {
+      kpiEl.textContent     = "APPROVED";
+      kpiEl.style.color     = "var(--kpmg-green)";
+      kpiByEl.textContent   = g.approved_by ? `by ${g.approved_by}` : "";
+      cardEl.className      = "gate-card gate-approved";
+      subEl.textContent     = "G1 approved — sensing pipeline unblocked.";
+      byEl.textContent      = g.approved_by
+        ? `Approved by ${g.approved_by}${g.approved_at ? " at " + g.approved_at : ""}`
+        : "";
+      byEl.style.display    = "block";
+      btnApprove.innerHTML  = "&#10003; Approved";
+    } else {
+      kpiEl.textContent    = "PENDING";
+      kpiEl.style.color    = "#92400E";
+      kpiByEl.textContent  = "awaiting approval";
+      cardEl.className     = "gate-card gate-pending";
+      subEl.textContent    = "Review promotions below, then approve to unblock the sensing pipeline.";
+      byEl.style.display   = "none";
+      btnApprove.innerHTML = "&#10003; Approve G1";
+    }
+  }
+
+  // ── Approve G1 ────────────────────────────────────────────────────────────
+  document.getElementById("btn-approve").addEventListener("click", async () => {
+    if (!currentCycle) { showPageError("Load a cycle first."); return; }
+    const btn = document.getElementById("btn-approve");
+    btn.disabled     = true;
+    btn.textContent  = "Approving…";
+    try {
+      const g = await API.approveGate("G1", currentCycle);
+      renderGateCard(g);
+    } catch (e) {
+      btn.disabled    = false;
+      btn.innerHTML   = "&#10003; Approve G1";
+      showPageError(`Approve failed: ${e.message}`);
+    }
+  });
+
+  // ── Load promotions ───────────────────────────────────────────────────────
+  async function loadPromos(cycle) {
+    try {
+      // API returns list[PromoResponse] directly (not wrapped)
+      currentPromos = await API.listPromotions(cycle) || [];
+      renderPromoTable(currentPromos);
+      document.getElementById("kpi-promo-count").textContent = currentPromos.length;
+      document.getElementById("kpi-promo-cycle").textContent = `for ${cycle}`;
+    } catch (e) {
+      showPageError(`Could not load promotions: ${e.message}`);
+    }
+  }
+
+  function renderPromoTable(promos) {
+    const tbody   = document.getElementById("promo-tbody");
+    const emptyEl = document.getElementById("promo-empty");
+    const countEl = document.getElementById("promo-count-badge");
+
+    countEl.textContent = `${promos.length} entr${promos.length === 1 ? "y" : "ies"}`;
+
+    if (promos.length === 0) {
+      tbody.innerHTML = "";
+      emptyEl.classList.remove("hidden");
+      return;
+    }
+    emptyEl.classList.add("hidden");
+
+    const isCH = currentUser && currentUser.role === "commercial_head";
+
+    tbody.innerHTML = promos.map(p => {
+      const sourceLabel = p.is_ai_generated
+        ? '<span class="badge badge-orange">System-suggested</span>'
+        : '<span class="badge badge-blue">Manual</span>';
+      const editBtn = isCH
+        ? `<button class="btn btn-secondary"
+               style="padding:4px 10px;font-size:11px;"
+               onclick="openEditPanel('${escHtml(p.promo_id)}')">Edit</button>`
+        : "";
+      return `<tr>
+        <td>${escHtml(p.event_name)}</td>
+        <td>${escHtml(p.offer_type || "—")}</td>
+        <td>${escHtml(p.start_week)}</td>
+        <td>${escHtml(p.end_week)}</td>
+        <td class="text-right">${p.expected_uplift_pct != null
+          ? p.expected_uplift_pct.toFixed(1) + "%" : "—"}</td>
+        <td>${escHtml(p.sku_id || "All")}</td>
+        <td>${sourceLabel}</td>
+        <td>${editBtn}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  // ── Add / Edit panel ──────────────────────────────────────────────────────
+  document.getElementById("btn-add-promo").addEventListener("click", () => {
+    if (!currentCycle) { showPageError("Load a cycle first."); return; }
+    openAddPanel();
+  });
+  document.getElementById("btn-panel-cancel").addEventListener("click", closePanel);
+
+  function openAddPanel() {
+    document.getElementById("panel-title").textContent   = "Add Promotion";
+    document.getElementById("edit-promo-id").value       = "";
+    document.getElementById("promo-form").reset();
+    document.getElementById("f-start-week").value        = currentCycle || "";
+    document.getElementById("f-end-week").value          = currentCycle || "";
+    document.getElementById("panel-error").classList.add("hidden");
+    showPanel();
+  }
+
+  function openEditPanel(promoId) {
+    const p = currentPromos.find(x => x.promo_id === promoId);
+    if (!p) return;
+    document.getElementById("panel-title").textContent     = "Edit Promotion";
+    document.getElementById("edit-promo-id").value         = promoId;
+    document.getElementById("f-event-name").value          = p.event_name || "";
+    document.getElementById("f-offer-type").value          = p.offer_type || "other";
+    document.getElementById("f-start-week").value          = p.start_week || "";
+    document.getElementById("f-end-week").value            = p.end_week || "";
+    document.getElementById("f-uplift").value              = p.expected_uplift_pct != null
+      ? p.expected_uplift_pct : "";
+    document.getElementById("f-sku-id").value              = p.sku_id || "";
+    document.getElementById("f-financial-value").value     = p.financial_value || "";
+    document.getElementById("panel-error").classList.add("hidden");
+    showPanel();
+  }
+
+  function showPanel() {
+    const el = document.getElementById("promo-panel");
+    el.classList.remove("hidden");
+    el.scrollIntoView({ behavior: "smooth" });
+  }
+
+  function closePanel() {
+    document.getElementById("promo-panel").classList.add("hidden");
+  }
+
+  document.getElementById("promo-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const errEl   = document.getElementById("panel-error");
+    const saveBtn = document.getElementById("btn-panel-save");
+    errEl.classList.add("hidden");
+    saveBtn.disabled    = true;
+    saveBtn.textContent = "Saving…";
+
+    const promoId       = document.getElementById("edit-promo-id").value;
+    const upliftRaw     = document.getElementById("f-uplift").value;
+    const finValRaw     = document.getElementById("f-financial-value").value;
+
+    const body = {
+      event_name:          document.getElementById("f-event-name").value.trim(),
+      offer_type:          document.getElementById("f-offer-type").value,
+      start_week:          document.getElementById("f-start-week").value.trim(),
+      end_week:            document.getElementById("f-end-week").value.trim(),
+      expected_uplift_pct: upliftRaw !== "" ? parseFloat(upliftRaw) : null,
+      sku_id:              document.getElementById("f-sku-id").value.trim() || null,
+      financial_value:     finValRaw !== "" ? parseFloat(finValRaw) : null,
+    };
+
+    try {
+      if (promoId) {
+        await API.updatePromotion(promoId, body);
+      } else {
+        await API.createPromotion(body);
+      }
+      closePanel();
+      await loadPromos(currentCycle);
+    } catch (err) {
+      errEl.textContent = err.message;
+      errEl.classList.remove("hidden");
+    } finally {
+      saveBtn.disabled    = false;
+      saveBtn.textContent = "Save";
+    }
+  });
+
+  // ── System-suggested drafts ────────────────────────────────────────────────
+  document.getElementById("btn-ai-draft").addEventListener("click", async () => {
+    if (!currentCycle) { showPageError("Load a cycle first."); return; }
+    const panel = document.getElementById("draft-panel");
+    panel.classList.remove("hidden");
+    document.getElementById("draft-grid").innerHTML =
+      '<div class="text-muted text-sm">Loading suggestions…</div>';
+    panel.scrollIntoView({ behavior: "smooth" });
+
+    try {
+      const result = await API.aiDraftPromotions(currentCycle);
+      renderDrafts(result.drafts || []);
+    } catch (e) {
+      document.getElementById("draft-grid").innerHTML =
+        `<div class="alert alert-error">Could not load suggestions: ${e.message}</div>`;
+    }
+  });
+
+  document.getElementById("btn-draft-close").addEventListener("click", () => {
+    document.getElementById("draft-panel").classList.add("hidden");
+  });
+
+  function renderDrafts(drafts) {
+    const grid = document.getElementById("draft-grid");
+    if (drafts.length === 0) {
+      grid.innerHTML = '<div class="text-muted text-sm">No suggestions for this cycle.</div>';
+      return;
+    }
+    // Stash for addDraftToLedger
+    window._drafts = drafts;
+    grid.innerHTML = drafts.map((d, i) => `
+      <div class="draft-card" id="draft-${i}">
+        <div class="draft-card-title">${escHtml(d.event_name)}</div>
+        <div class="draft-card-meta">
+          ${escHtml(d.suggested_start_week)} &ndash; ${escHtml(d.suggested_end_week)}
+          &nbsp;&bull;&nbsp; Uplift:
+          <strong>${d.expected_uplift_pct != null
+            ? d.expected_uplift_pct.toFixed(1) + "%" : "—"}</strong>
+        </div>
+        <div class="text-sm text-muted">${escHtml(d.note || "")}</div>
+        <div style="margin-top:6px;">
+          <span class="badge badge-orange">System-suggested</span>
+        </div>
+        <div class="draft-card-actions">
+          <button class="btn btn-primary" style="padding:5px 12px;font-size:12px;"
+                  onclick="addDraftToLedger(${i})">Add to ledger</button>
+        </div>
+      </div>
+    `).join("");
+  }
+
+  async function addDraftToLedger(idx) {
+    const d = (window._drafts || [])[idx];
+    if (!d) return;
+    const btn = document.querySelector(`#draft-${idx} .btn-primary`);
+    if (btn) { btn.disabled = true; btn.textContent = "Adding…"; }
+
+    try {
+      await API.createPromotion({
+        event_name:          d.event_name,
+        offer_type:          d.offer_type || "price_discount",
+        start_week:          d.suggested_start_week,
+        end_week:            d.suggested_end_week,
+        expected_uplift_pct: d.expected_uplift_pct,
+        sku_id:              null,
+        is_ai_generated:     true,
+      });
+      if (btn) { btn.textContent = "&#10003; Added"; }
+      await loadPromos(currentCycle);
+    } catch (e) {
+      if (btn) { btn.disabled = false; btn.textContent = "Add to ledger"; }
+      showPageError(`Could not add draft: ${e.message}`);
+    }
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function escHtml(str) {
+    if (str == null) return "";
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function showPageError(msg) {
+    const el = document.getElementById("page-error");
+    el.textContent = msg;
+    el.classList.remove("hidden");
+    setTimeout(() => el.classList.add("hidden"), 6000);
+  }
+</script>
+</body>
+</html>

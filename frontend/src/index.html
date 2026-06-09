@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Demand Sensing Control Tower</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+<!-- Sidebar -->
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    Demand Sensing<br>Control Tower
+    <span>Samsung India · TV Division</span>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-label">Pipeline</div>
+    <a class="nav-item active" href="/index.html">
+      <span class="icon">&#9711;</span> Dashboard
+    </a>
+    <a class="nav-item" href="/pages/forecast.html">
+      <span class="icon">&#9650;</span> Forecast
+    </a>
+    <a class="nav-item" href="/pages/ingestion.html">
+      <span class="icon">&#8659;</span> Ingestion
+    </a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-label">Gates</div>
+    <a class="nav-item" href="/pages/promotions.html">
+      <span class="icon">&#9989;</span> Promotions (G1)
+    </a>
+    <a class="nav-item text-muted" href="#">
+      <span class="icon">&#128274;</span> S&OP Consensus (G2)
+    </a>
+    <a class="nav-item text-muted" href="#">
+      <span class="icon">&#128274;</span> Retraining (G3)
+    </a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-label">System</div>
+    <a class="nav-item" href="/pages/audit.html">
+      <span class="icon">&#128196;</span> Audit Log
+    </a>
+  </div>
+
+  <div class="sidebar-user">
+    <div>
+      <div class="sidebar-user-name" id="sidebar-username">—</div>
+      <div class="sidebar-user-role" id="sidebar-role">—</div>
+    </div>
+    <button class="btn-logout" id="btn-logout">Sign out</button>
+  </div>
+</nav>
+
+<!-- Main -->
+<div class="main-wrap">
+  <header class="header">
+    <div class="header-title">Dashboard</div>
+    <div class="header-meta">
+      <span id="cycle-label" class="badge badge-blue">Cycle —</span>
+      <span id="system-status" class="text-muted">Checking…</span>
+    </div>
+  </header>
+
+  <main class="content">
+    <div id="health-alert" class="alert alert-info hidden"></div>
+
+    <div class="kpi-strip">
+      <div class="kpi-card">
+        <div class="kpi-label">Pipeline State</div>
+        <div class="kpi-value" id="kpi-state" style="font-size:18px;">—</div>
+        <div class="kpi-sub" id="kpi-cycle">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">SKUs Loaded</div>
+        <div class="kpi-value" id="kpi-skus">—</div>
+        <div class="kpi-sub">sku_master records</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Sales History Rows</div>
+        <div class="kpi-value" id="kpi-hist">—</div>
+        <div class="kpi-sub">validated records</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Baseline Forecasts</div>
+        <div class="kpi-value" id="kpi-forecasts">—</div>
+        <div class="kpi-sub">week rows</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Quick Actions</div>
+      <div class="flex gap-8">
+        <a href="/pages/ingestion.html" class="btn btn-primary">Run Ingestion</a>
+        <a href="/pages/forecast.html" class="btn btn-secondary">View Forecast</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Build Status</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Component</th>
+            <th>Status</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Repository Layer</td><td><span class="badge badge-green">Active</span></td><td>SQLiteRepository backing all I/O</td></tr>
+          <tr><td>Database Migration</td><td><span class="badge badge-green">Active</span></td><td>All §5.1 tables created on boot</td></tr>
+          <tr><td>Synthetic Data</td><td id="row-synth-status"><span class="badge badge-yellow">Pending</span></td><td>9 SKUs × 12 states × 156 weeks</td></tr>
+          <tr><td>Module 1 — Ingestion</td><td id="row-ingest-status"><span class="badge badge-yellow">Pending</span></td><td>Run ingestion to populate tables</td></tr>
+          <tr><td>Baseline Forecasting</td><td id="row-hw-status"><span class="badge badge-yellow">Pending</span></td><td id="row-hw-note">108 series, champion: HW / ARIMA / Croston</td></tr>
+          <tr><td>XGBoost Sensing</td><td id="row-sensing-status"><span class="badge badge-yellow">Pending</span></td><td id="row-sensing-note">Run pipeline first (sensing runs after G1 approval)</td></tr>
+          <tr><td>Gate G1 — Promotions Calendar</td><td><span class="badge badge-green">Complete</span></td><td>Session + bcrypt auth; RBAC; commercial_head approves</td></tr>
+          <tr><td>Gate G2 — S&amp;OP Consensus</td><td><span class="badge badge-orange">Phase 4</span></td><td>Not yet built</td></tr>
+          <tr><td>Gate G3 — Retraining</td><td><span class="badge badge-orange">Phase 5</span></td><td>Not yet built (D-014 Option C required first)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+  // Populate sidebar user footer on every page
+  (async () => {
+    try {
+      const u = await API.me();
+      if (u) {
+        document.getElementById("sidebar-username").textContent = u.user_id;
+        document.getElementById("sidebar-role").textContent     = u.role;
+      }
+    } catch (_) {}
+    document.getElementById("btn-logout").addEventListener("click", async () => {
+      try { await API.logout(); } catch (_) {}
+      window.location.href = "/pages/login.html";
+    });
+  })();
+</script>
+<script>
+  document.addEventListener("DOMContentLoaded", async () => {
+    try {
+      const h = await API.health();
+      document.getElementById("system-status").textContent = "System OK";
+      document.getElementById("kpi-skus").textContent = h.counts?.skus ?? "—";
+      document.getElementById("kpi-hist").textContent = (h.counts?.sales_history ?? "—").toLocaleString?.() ?? h.counts?.sales_history ?? "—";
+      document.getElementById("kpi-forecasts").textContent = (h.counts?.baseline_forecasts ?? "—").toLocaleString?.() ?? h.counts?.baseline_forecasts ?? "—";
+      document.getElementById("kpi-state").textContent = h.pipeline_state ?? "IDLE";
+      document.getElementById("kpi-cycle").textContent = h.current_cycle ?? "—";
+
+      if ((h.counts?.sales_history ?? 0) > 0) {
+        document.getElementById("row-synth-status").innerHTML = '<span class="badge badge-green">Loaded</span>';
+        document.getElementById("row-ingest-status").innerHTML = '<span class="badge badge-green">Complete</span>';
+      }
+      // All 108 series × 12 weeks = 1,296 rows when fully built
+      const bf = h.counts?.baseline_forecasts ?? 0;
+      if (bf >= 1296) {
+        document.getElementById("row-hw-status").innerHTML = '<span class="badge badge-green">Complete</span>';
+        document.getElementById("row-hw-note").textContent = "108 series, champion: HW / ARIMA / Croston";
+      } else if (bf > 0) {
+        document.getElementById("row-hw-status").innerHTML = '<span class="badge badge-yellow">Partial</span>';
+        document.getElementById("row-hw-note").textContent = `${bf} rows (full run = 1,296)`;
+      }
+    } catch (e) {
+      document.getElementById("health-alert").textContent = `Cannot reach API: ${e.message}`;
+      document.getElementById("health-alert").classList.remove("hidden");
+      document.getElementById("system-status").textContent = "API unreachable";
+    }
+
+    // Sensing status — separate call, fails silently if sensing hasn't run yet
+    try {
+      const s = await API.getSensingSummary();
+      if (s && s.overall_sensing_mape_pct !== null) {
+        document.getElementById("row-sensing-status").innerHTML = '<span class="badge badge-green">Complete</span>';
+        document.getElementById("row-sensing-note").textContent =
+          `${s.series_count} series · overall MAPE ${s.overall_sensing_mape_pct}%`;
+      }
+    } catch (_) {}
+  });
+</script>
+</body>
+</html>

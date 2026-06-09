@@ -1,0 +1,13 @@
+state_code,state_name,commercial_zone,is_reporting
+MH,Maharashtra,West,1
+DL,Delhi,North,1
+KA,Karnataka,South,1
+TN,Tamil Nadu,South,1
+GJ,Gujarat,West,1
+RJ,Rajasthan,North,1
+WB,West Bengal,East,1
+UP,Uttar Pradesh,North,1
+AP,Andhra Pradesh,South,1
+HR,Haryana,North,1
+KL,Kerala,South,1
+OR,Odisha,East,1

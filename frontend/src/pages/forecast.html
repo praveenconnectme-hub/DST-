@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Forecast — Demand Sensing Control Tower</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+<!-- Sidebar -->
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    Demand Sensing<br>Control Tower
+    <span>Samsung India · TV Division</span>
+  </div>
+  <div class="nav-section">
+    <div class="nav-section-label">Pipeline</div>
+    <a class="nav-item" href="/index.html"><span class="icon">&#9711;</span> Dashboard</a>
+    <a class="nav-item active" href="/pages/forecast.html"><span class="icon">&#9650;</span> Forecast</a>
+    <a class="nav-item" href="/pages/ingestion.html"><span class="icon">&#8659;</span> Ingestion</a>
+  </div>
+  <div class="nav-section">
+    <div class="nav-section-label">Gates</div>
+    <a class="nav-item" href="/pages/promotions.html"><span class="icon">&#9989;</span> Promotions (G1)</a>
+    <a class="nav-item text-muted" href="#"><span class="icon">&#128274;</span> S&OP Consensus (G2)</a>
+    <a class="nav-item text-muted" href="#"><span class="icon">&#128274;</span> Retraining (G3)</a>
+  </div>
+  <div class="nav-section">
+    <div class="nav-section-label">System</div>
+    <a class="nav-item" href="/pages/audit.html"><span class="icon">&#128196;</span> Audit Log</a>
+  </div>
+  <div class="sidebar-user">
+    <div>
+      <div class="sidebar-user-name" id="sidebar-username">—</div>
+      <div class="sidebar-user-role" id="sidebar-role">—</div>
+    </div>
+    <button class="btn-logout" id="btn-logout">Sign out</button>
+  </div>
+</nav>
+
+<!-- Main -->
+<div class="main-wrap">
+  <header class="header">
+    <div class="header-title">Baseline Forecast</div>
+    <div class="header-meta">
+      <span class="badge badge-blue">SKU_MID_01 &times; MH</span>
+      <span id="header-baseline-badge" class="badge badge-green">Baseline</span>
+      <span id="header-sensing-badge" class="badge badge-yellow hidden">XGBoost Sensing</span>
+    </div>
+  </header>
+
+  <main class="content">
+    <!-- Status / error message -->
+    <div id="forecast-status" class="alert alert-info hidden"></div>
+
+    <!-- KPI strip -->
+    <div class="kpi-strip">
+      <div class="kpi-card">
+        <div class="kpi-label">Series</div>
+        <div class="kpi-value" id="kpi-sku" style="font-size:16px;">—</div>
+        <div class="kpi-sub">SKU &times; State</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Forecast Weeks</div>
+        <div class="kpi-value" id="kpi-forecast-weeks">—</div>
+        <div class="kpi-sub">horizon weeks</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Baseline Model</div>
+        <div class="kpi-value" id="kpi-model" style="font-size:16px;">—</div>
+        <div class="kpi-sub">champion algorithm</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Sensing Model</div>
+        <div class="kpi-value" id="kpi-sensing-model" style="font-size:16px;">—</div>
+        <div class="kpi-sub" id="kpi-sensing-weeks">holdout weeks</div>
+      </div>
+    </div>
+
+    <!-- Chart -->
+    <div class="card">
+      <div class="flex-between" style="margin-bottom:12px;">
+        <span class="card-title" style="margin-bottom:0;border-bottom:none;">Forecast Chart</span>
+        <div class="chart-legend">
+          <div class="legend-item">
+            <div class="legend-dot" style="background:var(--kpmg-blue);"></div>
+            <span>Actual</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background:var(--kpmg-teal);"></div>
+            <span>Baseline Forecast</span>
+          </div>
+          <div class="legend-item" id="sensing-legend" style="display:none;">
+            <div class="legend-dot" style="background:var(--kpmg-yellow);"></div>
+            <span>XGBoost Sensing</span>
+          </div>
+        </div>
+        <div class="flex gap-8">
+          <button id="btn-ingest" class="btn btn-secondary">Run Ingestion</button>
+          <button id="btn-refresh" class="btn btn-primary">&#8635; Refresh</button>
+        </div>
+      </div>
+      <div class="chart-area" id="forecast-chart" style="height:250px;align-items:flex-end;overflow-x:auto;">
+        <div class="text-muted text-sm" style="margin:auto;">Loading forecast data…</div>
+      </div>
+    </div>
+
+    <!-- Data table -->
+    <div class="card">
+      <div class="card-title">Forecast Data</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Week</th>
+              <th class="text-right">Actual</th>
+              <th class="text-right">Baseline</th>
+              <th class="text-right">XGBoost Sensing</th>
+              <th class="text-right">Baseline Dev %</th>
+            </tr>
+          </thead>
+          <tbody id="forecast-tbody">
+            <tr><td colspan="5" class="text-center text-muted">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="alert alert-info">
+      <strong>Phase 2 complete:</strong> Champion baseline (Holt-Winters / Auto-ARIMA / Croston) for all 108 series.
+      XGBoost demand sensing overlaid where available (holdout period). Baseline future forecast shown beyond history.
+    </div>
+  </main>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+  (async () => {
+    try {
+      const u = await API.me();
+      if (u) {
+        document.getElementById("sidebar-username").textContent = u.user_id;
+        document.getElementById("sidebar-role").textContent     = u.role;
+      }
+    } catch (_) {}
+    document.getElementById("btn-logout").addEventListener("click", async () => {
+      try { await API.logout(); } catch (_) {}
+      window.location.href = "/pages/login.html";
+    });
+  })();
+</script>
+<script src="/js/forecast.js"></script>
+</body>
+</html>

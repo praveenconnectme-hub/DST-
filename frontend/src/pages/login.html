@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign In — Demand Sensing Control Tower</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="login-wrap">
+
+<div class="login-card">
+  <div class="login-logo">
+    <div class="login-logo-title">Demand Sensing<br>Control Tower</div>
+    <div class="login-logo-sub">Samsung India · TV Division</div>
+  </div>
+
+  <div id="login-error" class="alert alert-error hidden"></div>
+
+  <form id="login-form">
+    <div class="form-group">
+      <label class="form-label" for="username">Username</label>
+      <input class="form-input" type="text" id="username" name="username"
+             placeholder="e.g. commercial_head_01" autocomplete="username" required />
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="password">Password</label>
+      <input class="form-input" type="password" id="password" name="password"
+             autocomplete="current-password" required />
+    </div>
+    <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;" id="btn-signin">
+      Sign In
+    </button>
+  </form>
+
+  <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);">
+    <div class="text-sm text-muted" style="margin-bottom:8px;font-weight:600;">Demo accounts</div>
+    <table style="width:100%;font-size:11px;color:var(--gray-600);">
+      <thead><tr><th style="text-align:left;padding-bottom:4px;">Username</th><th style="text-align:left;">Password</th></tr></thead>
+      <tbody>
+        <tr><td>commercial_head_01</td><td>ch-demo-2024</td></tr>
+        <tr><td>planner_01</td><td>pl-demo-2024</td></tr>
+        <tr><td>sales_mgr_01</td><td>sm-demo-2024</td></tr>
+        <tr><td>sop_chair_01</td><td>sop-demo-2024</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+  document.getElementById("login-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const errEl  = document.getElementById("login-error");
+    const btnEl  = document.getElementById("btn-signin");
+    errEl.classList.add("hidden");
+    btnEl.disabled = true;
+    btnEl.textContent = "Signing in…";
+
+    const username = document.getElementById("username").value.trim();
+    const password = document.getElementById("password").value;
+
+    try {
+      await API.login(username, password);
+      window.location.href = "/index.html";
+    } catch (err) {
+      errEl.textContent = "Invalid username or password.";
+      errEl.classList.remove("hidden");
+      btnEl.disabled = false;
+      btnEl.textContent = "Sign In";
+    }
+  });
+</script>
+</body>
+</html>

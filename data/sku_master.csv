@@ -1,0 +1,10 @@
+sku_id,sku_name,product_tier,base_cost_inr,is_active
+SKU_ENT_01,"Samsung Crystal 4K 32""",entry,18000,1
+SKU_ENT_02,"Samsung Crystal 4K 43""",entry,22000,1
+SKU_MID_01,"Samsung AU8000 55""",mid,38000,1
+SKU_MID_02,"Samsung AU8000 65""",mid,48000,1
+SKU_UPR_01,"Samsung QN85B 55""",upper,70000,1
+SKU_UPR_02,"Samsung QN85B 65""",upper,90000,1
+SKU_PRM_01,"Samsung Neo QLED 8K 65""",premium,150000,1
+SKU_PRM_02,"Samsung Neo QLED 8K 75""",premium,200000,1
+SKU_LUX_01,"Samsung The Frame 85""",luxury,350000,1

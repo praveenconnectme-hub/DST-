@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ingestion — Demand Sensing Control Tower</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sidebar-logo">Demand Sensing<br>Control Tower<span>Samsung India · TV Division</span></div>
+  <div class="nav-section">
+    <div class="nav-section-label">Pipeline</div>
+    <a class="nav-item" href="/index.html"><span class="icon">&#9711;</span> Dashboard</a>
+    <a class="nav-item" href="/pages/forecast.html"><span class="icon">&#9650;</span> Forecast</a>
+    <a class="nav-item active" href="/pages/ingestion.html"><span class="icon">&#8659;</span> Ingestion</a>
+  </div>
+  <div class="nav-section">
+    <div class="nav-section-label">Gates</div>
+    <a class="nav-item" href="/pages/promotions.html"><span class="icon">&#9989;</span> Promotions (G1)</a>
+    <a class="nav-item text-muted" href="#"><span class="icon">&#128274;</span> S&OP Consensus (G2)</a>
+    <a class="nav-item text-muted" href="#"><span class="icon">&#128274;</span> Retraining (G3)</a>
+  </div>
+  <div class="nav-section">
+    <div class="nav-section-label">System</div>
+    <a class="nav-item" href="/pages/audit.html"><span class="icon">&#128196;</span> Audit Log</a>
+  </div>
+  <div class="sidebar-user">
+    <div>
+      <div class="sidebar-user-name" id="sidebar-username">—</div>
+      <div class="sidebar-user-role" id="sidebar-role">—</div>
+    </div>
+    <button class="btn-logout" id="btn-logout">Sign out</button>
+  </div>
+</nav>
+
+<div class="main-wrap">
+  <header class="header">
+    <div class="header-title">Data Ingestion — Module 1</div>
+    <div class="header-meta">
+      <span id="ingest-badge" class="badge badge-yellow">Idle</span>
+    </div>
+  </header>
+
+  <main class="content">
+    <div id="ingest-alert" class="alert alert-info hidden"></div>
+
+    <div class="kpi-strip">
+      <div class="kpi-card"><div class="kpi-label">SKUs Loaded</div><div class="kpi-value" id="ki-skus">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">States Loaded</div><div class="kpi-value" id="ki-states">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">History Rows</div><div class="kpi-value" id="ki-hist">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Quarantined</div><div class="kpi-value" id="ki-quar" style="color:var(--kpmg-red)">—</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Run Ingestion Pipeline</div>
+      <p class="text-muted" style="margin-bottom:16px;">
+        Triggers the worker to generate synthetic data (if not already done) and run Module 1 ingestion.
+        Validates records, applies interpolation, quarantines bad rows.
+      </p>
+      <div class="flex gap-8">
+        <button id="btn-run" class="btn btn-primary">&#9654; Trigger Ingestion</button>
+        <button id="btn-status" class="btn btn-secondary">&#8635; Refresh Status</button>
+      </div>
+      <div id="run-result" class="mt-16 hidden"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Ingestion Log</div>
+      <div id="ingest-log" class="text-muted text-sm">Click "Refresh Status" to load.</div>
+    </div>
+  </main>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+  (async () => {
+    try {
+      const u = await API.me();
+      if (u) {
+        document.getElementById("sidebar-username").textContent = u.user_id;
+        document.getElementById("sidebar-role").textContent     = u.role;
+      }
+    } catch (_) {}
+    document.getElementById("btn-logout").addEventListener("click", async () => {
+      try { await API.logout(); } catch (_) {}
+      window.location.href = "/pages/login.html";
+    });
+  })();
+</script>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  async function loadStatus() {
+    try {
+      const h = await API.health();
+      document.getElementById("ki-skus").textContent  = h.counts?.skus ?? "—";
+      document.getElementById("ki-states").textContent = h.counts?.states ?? "—";
+      document.getElementById("ki-hist").textContent  = (h.counts?.sales_history ?? 0).toLocaleString();
+      document.getElementById("ki-quar").textContent  = h.counts?.quarantine ?? "—";
+      if ((h.counts?.sales_history ?? 0) > 0) {
+        document.getElementById("ingest-badge").textContent = "Ingested";
+        document.getElementById("ingest-badge").className   = "badge badge-green";
+      }
+      const logEl = document.getElementById("ingest-log");
+      logEl.innerHTML = `<pre style="font-size:12px;white-space:pre-wrap;">${JSON.stringify(h.counts, null, 2)}</pre>`;
+    } catch(e) {
+      document.getElementById("ingest-alert").textContent = e.message;
+      document.getElementById("ingest-alert").classList.remove("hidden");
+    }
+  }
+
+  document.getElementById("btn-run").addEventListener("click", async () => {
+    const btn = document.getElementById("btn-run");
+    btn.disabled = true; btn.textContent = "Running…";
+    const res = document.getElementById("run-result");
+    res.className = "alert alert-info mt-16";
+    res.textContent = "Ingestion triggered — worker is processing…";
+    try {
+      const r = await API.triggerIngest();
+      res.textContent = r.message || JSON.stringify(r);
+      res.className = "alert alert-success mt-16";
+      setTimeout(loadStatus, 3000);
+    } catch(e) {
+      res.textContent = `Error: ${e.message}`;
+      res.className = "alert alert-error mt-16";
+    } finally {
+      btn.disabled = false; btn.textContent = "&#9654; Trigger Ingestion";
+    }
+  });
+
+  document.getElementById("btn-status").addEventListener("click", loadStatus);
+  loadStatus();
+});
+</script>
+</body>
+</html>
