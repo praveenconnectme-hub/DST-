@@ -236,13 +236,10 @@ def test_feature_matrix_is_float_convertible_after_assembly(tmp_path):
 
 def test_model_base_score_is_python_float_scalar_and_fit_succeeds(tmp_path):
     """
-    base_score passed to XGBRegressor must be a plain Python float, not a
-    numpy scalar/array.  In XGBoost 2.x, leaving base_score=None triggers
-    internal auto-computation that can wrap mean(y) in a 1-element array;
-    that array's repr ('[1.185077E3]') hits a float() call and raises
-    "could not convert string to float: '[1.185077E3]'" even though X and y
-    are both confirmed clean.  Computing base_score ourselves with
-    float(np.mean(y_train)) and passing it explicitly bypasses that path.
+    base_score passed to XGBRegressor must be a plain Python float scalar.
+    Computing it with float(np.mean(y_train)) and passing it explicitly is
+    defensive against any internal auto-computation that could produce a
+    non-scalar value and cause fit() to fail.
     """
     import xgboost as xgb
     from sklearn.preprocessing import LabelEncoder
@@ -285,6 +282,77 @@ def test_model_base_score_is_python_float_scalar_and_fit_succeeds(tmp_path):
     X_train = tr[FEATURE_COLS].values.astype(float)
     model = xgb.XGBRegressor(**_XGB_PARAMS, base_score=base_score)
     model.fit(X_train, y_train)
+
+
+def test_pred_contribs_replaces_shap_tree_explainer(tmp_path):
+    """
+    Regression guard: XGBoost native pred_contribs=True must replace
+    shap.TreeExplainer, which is incompatible with XGBoost 3.x.
+
+    shap.TreeExplainer reads base_score from the booster JSON config.
+    XGBoost 3.x serialises it as '[1.185077E3]' (bracketed scientific notation).
+    SHAP 0.49.1 calls float() on that raw string and raises ValueError before
+    any prediction happens.  pred_contribs=True is XGBoost's own C++ SHAP
+    implementation and is always version-compatible.
+
+    pred_contribs returns (n_samples, n_features + 1): the last column is the
+    bias/base term.  After slicing [:, :-1] the shape is (n_samples, n_features)
+    with per-feature contributions in FEATURE_COLS order.
+    """
+    import xgboost as xgb
+    from sklearn.preprocessing import LabelEncoder
+    from pipeline.sensing import HOLDOUT_WEEKS, _XGB_PARAMS
+
+    repo = _setup_repo_with_data(tmp_path)
+    df, weeks_list, _ = assemble_features(repo)
+
+    sku_le   = LabelEncoder().fit(sorted(df["sku_id"].unique()))
+    state_le = LabelEncoder().fit(sorted(df["state_code"].unique()))
+    df = df.copy()
+    df["sku_id_enc"]     = sku_le.transform(df["sku_id"])
+    df["state_code_enc"] = state_le.transform(df["state_code"])
+
+    holdout_start_ord = len(weeks_list) - HOLDOUT_WEEKS
+    df_clean   = df.dropna(subset=FEATURE_COLS).copy()
+    train_df   = df_clean[df_clean["week_ord"] < holdout_start_ord].copy()
+    holdout_df = df_clean[df_clean["week_ord"] >= holdout_start_ord].copy()
+
+    tr = train_df[train_df["product_tier"]   == "entry"].reset_index(drop=True)
+    ho = holdout_df[holdout_df["product_tier"] == "entry"].reset_index(drop=True)
+    assert len(tr) >= 20 and len(ho) > 0
+
+    X_train    = tr[FEATURE_COLS].values.astype(float)
+    y_train    = tr["quantity_actual"].values.astype(float)
+    X_hold     = ho[FEATURE_COLS].values.astype(float)
+    base_score = float(np.mean(y_train))
+
+    model = xgb.XGBRegressor(**_XGB_PARAMS, base_score=base_score)
+    model.fit(X_train, y_train)
+
+    # pred_contribs via booster API (sklearn predict() doesn't expose pred_contribs in 3.x)
+    contribs = model.get_booster().predict(xgb.DMatrix(X_hold), pred_contribs=True)
+    assert contribs.ndim == 2, f"contribs must be 2-D, got shape={contribs.shape}"
+    assert contribs.shape[1] == len(FEATURE_COLS) + 1, (
+        f"Expected {len(FEATURE_COLS)+1} columns (features + bias), "
+        f"got {contribs.shape[1]}"
+    )
+
+    shap_mat = contribs[:, :-1]
+    assert shap_mat.shape == (len(ho), len(FEATURE_COLS)), (
+        f"Expected ({len(ho)}, {len(FEATURE_COLS)}), got {shap_mat.shape}"
+    )
+    assert np.issubdtype(shap_mat.dtype, np.floating), (
+        f"shap_mat dtype not float: {shap_mat.dtype}"
+    )
+
+    # Must round-trip through JSON as feature-keyed dict (downstream consumer shape)
+    import json
+    shap_dict = {FEATURE_COLS[j]: round(float(shap_mat[0, j]), 4)
+                 for j in range(len(FEATURE_COLS))}
+    parsed = json.loads(json.dumps(shap_dict))
+    assert set(parsed.keys()) == set(FEATURE_COLS), (
+        f"Contribution keys don't match FEATURE_COLS: {set(parsed.keys())}"
+    )
 
 
 def test_training_path_x_and_y_are_numeric_and_fit_succeeds(tmp_path):

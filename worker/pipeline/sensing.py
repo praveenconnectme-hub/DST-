@@ -34,7 +34,6 @@ from datetime import datetime, timezone
 import numpy as np
 import pandas as pd
 import xgboost as xgb
-import shap
 from sklearn.preprocessing import LabelEncoder
 
 # ── Constants ──────────────────────────────────────────────────────────────────
@@ -222,7 +221,7 @@ def run(repo) -> dict:
     Writes to:
       - model_registry   : one xgboost_<tier>_v1 row per tier, status='champion'
       - audit_log        : MODEL_CHAMPION_SELECTED per tier (same transaction)
-      - demand_sensing_output : one row per sku×state×holdout_week with SHAP JSON
+      - demand_sensing_output : one row per sku×state×holdout_week with feature-contribution JSON
 
     Returns a summary dict including:
       - sensing vs baseline MAPE comparison
@@ -290,25 +289,9 @@ def run(repo) -> dict:
                     raise
             return frame[FEATURE_COLS].values.astype(float)
 
-        # ── Target vector: diagnose dtype/shape, then flatten to 1-D float64 ──
-        # Defensive against cells that are 1-element arrays instead of scalars.
-        # When XGBoost 2.x builds a DMatrix from such a y, it hits these cells
-        # as nested arrays whose repr is '[1.185077E3]' and raises
-        # "could not convert string to float" even though X is clean.
+        # ── Target vector: flatten to 1-D float64 (defensive against array cells) ──
         def _to_y_array(series, frame_label):
             arr = np.asarray(series)
-            print(
-                f"[sensing] DIAG tier={tier} {frame_label} y: "
-                f"dtype={series.dtype}  ndim={arr.ndim}  shape={arr.shape}  "
-                f"samples={series.head(3).tolist()}"
-            )
-            if series.dtype == object:
-                _samp = series.dropna().head(3).tolist()
-                print(
-                    f"[sensing] DIAG tier={tier} {frame_label} y OBJECT "
-                    f"samples={_samp}  "
-                    f"types={[type(v).__name__ for v in _samp]}"
-                )
             if arr.ndim > 1:
                 arr = arr.ravel()
             if arr.dtype == object:
@@ -336,19 +319,7 @@ def run(repo) -> dict:
             f"[sensing] y_train not 1-D float for tier={tier}: "
             f"ndim={y_train.ndim}, dtype={y_train.dtype}"
         )
-        # base_score must be a plain Python float scalar.
-        # In XGBoost 2.x, leaving base_score as None (the 2.x default) triggers
-        # internal auto-computation that can wrap mean(y) in a 1-element array.
-        # That array's repr ('[ 1.185077E3]') is then passed through a code path
-        # that calls float() on it, raising "could not convert string to float:
-        # '[1.185077E3]'" even when X and y are confirmed clean.
-        # Computing it here with float() guarantees a plain Python scalar.
         base_score = float(np.mean(y_train))
-        print(
-            f"[sensing] DIAG tier={tier} model_params:  "
-            f"base_score={base_score!r} ({type(base_score).__name__})  "
-            f"static_params={_XGB_PARAMS}"
-        )
         print(f"[sensing] Training tier={tier}: {len(tr)} train rows ...")
         model = xgb.XGBRegressor(**_XGB_PARAMS, base_score=base_score)
         model.fit(X_train, y_train)
@@ -356,9 +327,18 @@ def run(repo) -> dict:
         # ── Holdout predictions (no negatives) ────────────────────────────────
         y_pred = np.maximum(0.0, model.predict(X_hold))
 
-        # ── SHAP values on holdout rows ───────────────────────────────────────
-        explainer = shap.TreeExplainer(model)
-        shap_mat  = explainer.shap_values(X_hold)   # shape: (n_holdout, n_features)
+        # ── Feature contributions via XGBoost native pred_contribs ──────────────
+        # pred_contribs=True returns (n_holdout, n_features + 1): each column
+        # 0..n_features-1 is the per-feature contribution (same semantics as
+        # SHAP TreeExplainer values); the LAST column is the bias/base term.
+        # shap.TreeExplainer is incompatible with XGBoost 3.x: it reads
+        # base_score from the booster JSON config in the format '[1.185077E3]'
+        # (changed in 3.x) and calls float() on the raw string, raising
+        # ValueError before any prediction happens.
+        contribs  = model.get_booster().predict(
+            xgb.DMatrix(X_hold), pred_contribs=True
+        )
+        shap_mat  = contribs[:, :-1]           # drop bias column → (n_holdout, n_features)
         shap_mean_abs += np.mean(np.abs(shap_mat), axis=0)
         n_tiers_trained += 1
 
